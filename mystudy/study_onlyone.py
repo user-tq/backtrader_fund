@@ -1,11 +1,8 @@
 import datetime
-
+import akshare as ak
+import pandas as pd
 import backtrader as bt
 import backtrader.analyzers as btanalyzers
-from backtrader import dataseries
-from backtrader_plotting import Bokeh
-from backtrader_plotting.schemes import Tradimo
-
 
 class BBandStrategy(bt.Strategy):
     """
@@ -38,6 +35,7 @@ class BBandStrategy(bt.Strategy):
     def next(self):
 
         position_size = self.broker.getposition(data=self.datas[0]).size
+        
         self.log(f"{position_size}, {self.dataprice[0]}, {self.bot[0]}")
 
         if self.dataprice[0] <= self.bot[0] and position_size <= 0:
@@ -71,16 +69,48 @@ class BBandStrategy(bt.Strategy):
             )
         )
 
+def getakdata():
+
+    # 利用 AKShare 获取股票的后复权数据，这里只获取前 6 列
+    stock_hfq_df = ak.fund_etf_hist_em( symbol="510300",period="daily", adjust="")
+    print(stock_hfq_df)
+
+    #stock_hfq_df = ak.stock_zh_a_hist(symbol="600028", adjust="hfq").iloc[:, :6]
+    # 处理字段命名，以符合 Backtrader 的要求
+    stock_hfq_df.columns = [
+        "date",
+        "open",
+        "close",
+        "high",
+        "low",
+        "volume",
+    ]
+    # 把 date 作为日期索引，以符合 Backtrader 的要求
+    stock_hfq_df.index = pd.to_datetime(stock_hfq_df["date"])
+
+    # 确保日期列被解析为 datetime 类型
+    # stock_hfq_df['datetime'] = pd.to_datetime(stock_hfq_df['datetime'])
+
+    # 将数值列转换为浮点数或整数
+    stock_hfq_df["open"] = pd.to_numeric(stock_hfq_df["open"], errors="coerce")
+    stock_hfq_df["high"] = pd.to_numeric(stock_hfq_df["high"], errors="coerce")
+    stock_hfq_df["low"] = pd.to_numeric(stock_hfq_df["low"], errors="coerce")
+    stock_hfq_df["close"] = pd.to_numeric(stock_hfq_df["close"], errors="coerce")
+    stock_hfq_df["volume"] = pd.to_numeric(stock_hfq_df["volume"], errors="coerce")
+    return stock_hfq_df
+
 
 if __name__ == "__main__":
 
     cash = 200000.00
     periods = range(1, 60)
 
-    opt_start_date = datetime.datetime(2020, 4, 10)
     run_start_date = datetime.datetime(2020, 1, 6)
     end_date = datetime.datetime.now()
-
+    stock_hfq_df=getakdata()
+    data = bt.feeds.PandasData(
+        dataname=stock_hfq_df, fromdate=run_start_date, todate=end_date
+    )
     cerebro = bt.Cerebro()
     # cerebro.optstrategy(BBandStrategy, period=periods, printlog=False)
     cerebro.addstrategy(BBandStrategy, period=20)
@@ -96,5 +126,5 @@ if __name__ == "__main__":
     cerebro.addanalyzer(btanalyzers.SQN, _name="SQN")
 
     cerebro.run()
-    b = Bokeh(style="bar", scheme=Tradimo())
-    cerebro.plot(b)
+    #b = Bokeh()
+    cerebro.plot()
